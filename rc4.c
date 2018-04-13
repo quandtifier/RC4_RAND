@@ -30,7 +30,7 @@ void printData(unsigned char data[], int strlen)
 }
 
 // RC4 KSA (key scheduling algorithm)
-void ksa(char *k, unsigned char *s, int strlen)
+void ksa(char *k, unsigned char *s, int keylen)
 {
   int i;
   for (i = 0; i < BYTE_CONSTRAINT; i++) {
@@ -40,7 +40,7 @@ void ksa(char *k, unsigned char *s, int strlen)
   int j = 0;
   for (i = 0; i < BYTE_CONSTRAINT; i++)
   {
-    j = (j + s[i] + k[i % strlen]) % BYTE_CONSTRAINT;
+    j = (j + s[i] + k[i % keylen]) % BYTE_CONSTRAINT;
     unsigned char c = s[i];
     s[i] = s[j];
     s[j] = c;
@@ -63,22 +63,48 @@ void pgra(unsigned char k[], unsigned char s[], unsigned char in[], unsigned cha
     out[n] = s[(s[i] + s[j]) % BYTE_CONSTRAINT] ^ in[n];
   }
 }
+// if the user wants to run the test vector they enter 'test' as filename
+void runTestVector(char vect[], int strlen, unsigned char bytes[])
+{
+  //printbits(vect);
+  ksa(vect, bytes, strlen);
+  //printbits(vect);
+  printData(bytes, BYTE_CONSTRAINT);
 
+}
 int main(int argc, char *argv[])
 {
   // structure for the command line args
-  if( argc == 3 ) {
+  if( argc == 3 )
+  {
      printf("The key supplied is:  %s\n\n", argv[2]);
      printf("The text supplied is:  %s\n\n", argv[1]);
   }
-  else if( argc > 3 ) {
+  else if( argc > 3 )
+  {
      printf("Too many arguments supplied.\n");
      return -1;
   }
-  else if(argc < 3){
-     printf("Two arguments expected: [<plaintext>.txt] [key string up to 127 chars]\n");
+  else if(argc < 3)
+  {
+     printf("Two arguments expected: [<plaintext>.txt] [key]\n");
      return -1;
   }
+
+  // the keystream byte array
+  unsigned char bytes[BYTE_CONSTRAINT] = {0};
+
+
+  if( strcmp(argv[1],"test") == 0)
+  {
+    unsigned char vector[] = {0x01,0x02,0x03,0x04,0x05};// test vector
+    //printbits(key);
+    runTestVector(vector, 5, bytes);// not consistent with desired output
+    return 1;
+  }
+
+  // everything seems to work great from here down
+
   // open the plaintext file
   FILE *fptr = fopen(argv[1], "r");
   fseek(fptr, 0, SEEK_END);
@@ -90,16 +116,16 @@ int main(int argc, char *argv[])
   fread(pt, fsize, 1, fptr);
   fclose(fptr);
   pt[fsize] = 0;
+
+
+
   // get the key from the commandline
   char *key = argv[2];
-
-  // the keystream byte array
-  unsigned char bytes[BYTE_CONSTRAINT];
 
   // the first (encryption) run of RC4
   clock_t t;
   t = clock();//start timing
-  ksa(key, bytes, fsize);
+  ksa(key, bytes, strlen(key));
   unsigned char *ct = malloc(fsize + 1);
   pgra(key, bytes, pt, ct, fsize);
   ct[fsize] = 0;
@@ -112,7 +138,7 @@ int main(int argc, char *argv[])
 
   t = clock();//start time for decryption
   unsigned char *pt2 = malloc(fsize + 1);
-  ksa(key, bytes, fsize);
+  ksa(key, bytes, strlen(key));
   pgra(key, bytes, ct, pt2, fsize);
   t = clock() - t;//calculate decryption time
   double t2Seconds = ((double)t)/CLOCKS_PER_SEC;
